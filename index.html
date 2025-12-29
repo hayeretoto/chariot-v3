@@ -490,6 +490,15 @@
     
     window.simInterval = setInterval(simulate, 1000);
     simulate();
+    
+    // Enregistrement du Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/chariot-v3/sw.js')
+          .then(reg => console.log('✓ Service Worker enregistré'))
+          .catch(err => console.error('✗ Erreur SW:', err));
+      });
+    }
   </script>
 </body>
 </html>
