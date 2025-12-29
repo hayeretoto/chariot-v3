@@ -425,29 +425,83 @@
     }
     
     function setMode(newMode) {
-      mode = newMode;
-      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById('btn' + newMode.charAt(0) + newMode.slice(1).toLowerCase()).classList.add('active');
-      // Envoi BT: MODE:ECO|NORMAL|BOOST
-    }
+  mode = newMode;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn' + newMode.charAt(0) + newMode.slice(1).toLowerCase()).classList.add('active');
+  if (window.sendBT) window.sendBT('MODE:' + newMode);
+}
     
     function toggleCruise() {
-      document.getElementById('cruiseSwitch').classList.toggle('active');
-      // Envoi BT: CRUISE:0|1
-    }
+  document.getElementById('cruiseSwitch').classList.toggle('active');
+  const active = document.getElementById('cruiseSwitch').classList.contains('active');
+  if (window.sendBT) window.sendBT('CRUISE:' + (active ? '1' : '0'));
+}
     
-    function toggleReverse() {
-      document.getElementById('reverseSwitch').classList.toggle('active');
-      // Envoi BT: REVERSE:0|1
-    }
+   function toggleReverse() {
+  document.getElementById('reverseSwitch').classList.toggle('active');
+  const active = document.getElementById('reverseSwitch').classList.contains('active');
+  if (window.sendBT) window.sendBT('REVERSE:' + (active ? '1' : '0'));
+}
     
-    function connectBT() {
-      // Code Bluetooth Web API ici
-      alert('Bluetooth non implémenté dans la version test.\nÇa marchera sur GitHub Pages !');
+    async function connectBT() {
+  try {
+    document.getElementById('btBtn').disabled = true;
+    document.getElementById('btBtn').textContent = 'Connexion...';
+    
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ name: 'Chariot-V2' }],
+      optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b']
+    });
+    
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
+    
+    const charData = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
+    const charCmd = await service.getCharacteristic('1c95d5e3-d8f7-413a-bf3d-7a2e5d7be87e');
+    
+    await charData.startNotifications();
+    charData.addEventListener('characteristicvaluechanged', (e) => {
+      const value = new TextDecoder().decode(e.target.value);
+      // Format: SOC:85,V:36.8,W:245,S:75,SPD:18.5,KM:12.3,WH:245
+      const data = {};
+      value.split(',').forEach(pair => {
+        const [k, v] = pair.split(':');
+        data[k] = parseFloat(v);
+      });
+      
+      updateUI({
+        soc: data.SOC,
+        voltage: data.V,
+        power: data.W,
+        solar: data.S,
+        speed: data.SPD,
+        distance: data.KM,
+        consumed: data.WH
+      });
+    });
+    
+    // Fonction d'envoi commande
+    window.sendBT = async (cmd) => {
+      await charCmd.writeValue(new TextEncoder().encode(cmd));
+    };
+    
+    document.getElementById('btStatus').classList.add('connected');
+    document.getElementById('btBtn').textContent = 'Connecté ✓';
+    
+    // Arrête la simulation
+    clearInterval(window.simInterval);
+    
+  } catch(err) {
+    console.error(err);
+    document.getElementById('btBtn').disabled = false;
+    document.getElementById('btBtn').textContent = 'Réessayer';
+    alert('Erreur: ' + err.message);
+  }
+}
     }
     
     // Simulation auto
-    setInterval(simulate, 1000);
+   window.simInterval = setInterval(simulate, 1000);
     simulate();
   </script>
 </body>
